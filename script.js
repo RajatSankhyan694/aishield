@@ -55,7 +55,7 @@ async function loadModel() {
     statusEl.style.display = 'flex';
     if (hintEl) hintEl.style.display = 'none';
 
-    console.log('🚀 Starting model download from Hugging Face...');
+    console.log('🚀 Starting model download from CDN...');
 
     // Simulate progress with realistic timing
     let progress = 0;
@@ -69,14 +69,16 @@ async function loadModel() {
     console.log('📦 Importing Transformers.js library...');
     const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js');
     
-    // Configure environment for better browser compatibility
+    // Configure environment for browser compatibility and CORS workaround
     env.allowLocalModels = false;
     env.allowRemoteModels = true;
     env.allowSaving = false;
     
+    // Use jsDelivr CDN as mirror for model files (more reliable than Hugging Face direct)
+    env.remoteURL = 'https://cdn.jsdelivr.net/npm/@xenova/';
+    
     console.log('✅ Transformers.js library loaded');
-
-    console.log('🤖 Loading RoBERTa model from Hugging Face...');
+    console.log('🤖 Loading RoBERTa model from CDN mirror...');
     
     // Retry logic for model loading
     let retries = 0;
@@ -103,8 +105,14 @@ async function loadModel() {
         retries++;
         console.warn(`⚠️  Model load attempt ${retries} failed:`, error.message);
         
+        // On first failure, try alternative approach
+        if (retries === 1) {
+          console.log('🔄 Trying alternative CDN endpoint...');
+          env.remoteURL = null; // Reset to try default Hugging Face with retry
+        }
+        
         if (retries < maxRetries) {
-          const delay = Math.pow(2, retries) * 1000; // Exponential backoff: 2s, 4s
+          const delay = Math.pow(2, retries) * 1000; // Exponential backoff: 2s, 4s, 8s
           console.log(`⏳ Retrying in ${delay}ms...`);
           await new Promise(r => setTimeout(r, delay));
         }
@@ -140,7 +148,15 @@ async function loadModel() {
     // Show error to user
     const errBox = document.getElementById('err-box');
     if (errBox) {
-      errBox.textContent = '❌ Model download failed. This usually means: (1) Internet connection issue, (2) Hugging Face API is temporarily unavailable, or (3) Browser cache is full. Try: refreshing the page, clearing browser cache (F12 → Storage → Clear All), or trying again in a few minutes.';
+      const errorMsg = `❌ Model download blocked: ${error.message}. 
+      
+Try these steps:
+1. Clear browser cache (F12 → Storage → Clear All)
+2. Disable browser extensions (might block downloads)
+3. Try a different browser
+4. Check your internet connection
+5. Refresh and try again`;
+      errBox.textContent = errorMsg;
       errBox.style.display = 'block';
     }
     throw error;
