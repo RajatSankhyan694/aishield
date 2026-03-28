@@ -8,6 +8,7 @@ A powerful web application that detects AI-generated content and transforms it i
 - **Text Humanization**: Powered by Groq's LLaMA model to rewrite detected AI content naturally
 - **Privacy-First**: Content is only sent to Groq for rewriting—no storage or tracking
 - **Real-time Scanning**: Instant analysis with progress tracking
+- **Progress Bar Loader**: Visual feedback with color-changing progress (Red → Yellow → Green)
 - **Client-Side Processing**: All detection runs locally before humanization
 
 ## Tech Stack
@@ -15,85 +16,75 @@ A powerful web application that detects AI-generated content and transforms it i
 - **Frontend**: HTML5, CSS3, Vanilla JavaScript
 - **ML Detection**: RoBERTa (via Transformers.js)
 - **LLM API**: Groq (LLaMA model)
-- **Hosting**: Azure Static Web Apps
+- **Hosting**: GitHub Pages
+- **Model CDN**: Hugging Face (Transformers.js)
 
 ## Getting Started
 
 ### Prerequisites
 
 - A Groq API key (get one free at [console.groq.com](https://console.groq.com))
-- For deployment: Azure subscription and GitHub account
+
+### Live Application
+
+**Visit:** [https://rajatsankhyan694.github.io/aishield/](https://rajatsankhyan694.github.io/aishield/)
+
+1. Open the link above
+2. Enter your Groq API key in the top-right
+3. Paste text to detect and humanize
+4. Watch the progress bar as the model downloads on first load
 
 ### Local Development
 
 1. Clone the repository
+   ```bash
+   git clone https://github.com/RajatSankhyan694/aishield.git
+   cd aishield
+   ```
 2. Open `index.html` in a browser
 3. Enter your Groq API key
 4. Paste text to detect and humanize
 
 ## Deployment
 
-### Azure Static Web Apps (Recommended)
+### GitHub Pages (Live)
 
-This project is configured for automatic deployment on Azure Static Web Apps with GitHub Actions.
+The app is automatically deployed to GitHub Pages whenever you push to the `main` branch.
 
-#### Setup Steps:
+**Live URL:** [https://rajatsankhyan694.github.io/aishield/](https://rajatsankhyan694.github.io/aishield/)
 
-1. **Push to GitHub**
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial commit: AIShield deployment"
-   git remote add origin https://github.com/YOUR_USERNAME/aishield.git
-   git branch -M main
-   git push -u origin main
-   ```
+#### To Deploy Your Own Fork:
 
-2. **Create Azure Static Web App**
-   - Visit [Azure Portal](https://portal.azure.com)
-   - Create a new "Static Web App" resource
-   - Link your GitHub repository
-   - Select `main` branch
-   - Build configuration: Leave defaults (app location: `/`)
+1. **Fork the repository**
+   - Visit [https://github.com/RajatSankhyan694/aishield](https://github.com/RajatSankhyan694/aishield)
+   - Click "Fork"
 
-3. **Or Deploy via Azure CLI**
-   ```bash
-   az staticwebapp create \
-     --name aishield-prod-swa \
-     --resource-group rg-aishield \
-     --repo-url https://github.com/YOUR_USERNAME/aishield \
-     --repo-token YOUR_GITHUB_TOKEN \
-     --branch main \
-     --location eastus
-   ```
+2. **Enable GitHub Pages**
+   - Go to **Settings → Pages**
+   - Select **Deploy from a branch**
+   - Choose **main** branch and **/ (root)** folder
+   - Click **Save**
 
-4. **Or Deploy via Bicep**
-   ```bash
-   az deployment group create \
-     --resource-group rg-aishield \
-     --template-file infra/main.bicep \
-     --parameters infra/parameters.json \
-     --parameters repositoryUrl=https://github.com/YOUR_USERNAME/aishield repositoryToken=YOUR_TOKEN
-   ```
+3. **Wait for deployment** (1-2 minutes)
+   - Your app will be live at: `https://YOUR_USERNAME.github.io/aishield/`
+
+#### To Push Updates:
+
+```bash
+git add .
+git commit -m "Your feature description"
+git push origin main
+```
+
+GitHub Pages automatically redeploys on every push to `main`.
 
 ## Configuration
 
-### GitHub Actions Secret
+**No build step or server needed!** This is a static web application.
 
-The GitHub Actions workflow requires:
-- `AZURE_STATIC_WEB_APPS_API_TOKEN`: Generated automatically when connecting repo in Azure Portal
-
-### Static Web App Configuration
-
-The `staticwebapp.config.json` handles:
-- Routing (SPA mode with fallback to index.html)
-- MIME types
-- Response overrides for 404 errors
-- Authentication providers (GitHub)
-
-## Environment Variables
-
-No server-side environment variables needed. The app stores the Groq API key in browser localStorage.
+- The Groq API key is stored in browser localStorage (never sent to servers)
+- The `staticwebapp.config.json` handles SPA routing with fallback to `index.html`
+- Model is cached after first download (stored in browser cache)
 
 ## Architecture
 
@@ -116,10 +107,12 @@ Results Display
 
 ## Performance
 
-- First load: ~2-3s (RoBERTa model download, ~150MB)
-- Subsequent loads: Instant (cached)
-- Detection: 1-3s per text
-- Humanization: 3-5s via Groq
+- **First load**: ~30-50s (RoBERTa model download, ~50MB quantized)
+  - Visual progress bar shows download status
+  - Color transitions: Red (0%) → Yellow (50%) → Green (100%)
+- **Subsequent loads**: Instant (cached in browser)
+- **Detection**: 1-3s per text
+- **Humanization**: 3-5s via Groq
 
 ## Contributing
 
@@ -129,6 +122,26 @@ Contributions welcome! Feel free to submit issues or PRs.
 
 MIT
 
+## Troubleshooting
+
+**"Model download is slow"**
+- First download: ~30-50s for the 50MB model
+- Watch the progress bar for real-time feedback
+- Subsequent visits: instant (cached)
+
+**"Groq API error"**
+- Verify your API key at [console.groq.com](https://console.groq.com)
+- Check that the key starts with `gsk_`
+- Ensure the key has the `keys.read` permission
+
+**"Detection not working"**
+- Open browser DevTools (F12) and check the Console tab
+- Ensure you have at least 30 words of text
+- Try refreshing the page if the model fails to load
+
 ## Support
 
-For issues or questions, please open a GitHub issue or check the [Groq API documentation](https://console.groq.com/docs).
+For issues or questions, please:
+- Open a [GitHub issue](https://github.com/RajatSankhyan694/aishield/issues)
+- Check the [Groq API documentation](https://console.groq.com/docs)
+- Review [Transformers.js docs](https://github.com/xenova/transformers.js)
