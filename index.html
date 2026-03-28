@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIShield — Detect & Humanize</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 18 18" fill="none">
+        <path d="M9 1.5L15.5 5V13L9 16.5L2.5 13V5L9 1.5Z" stroke="#07080d" stroke-width="1.5" fill="none"/>
+        <path d="M9 5.5V12.5" stroke="#07080d" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M5.5 7.5L9 5.5L12.5 7.5" stroke="#07080d" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <span class="logo-name">AI<em>Shield</em></span>
+  </div>
+  <div class="header-right">
+    <div class="api-key-wrap">
+      <label>GROQ KEY</label>
+      <input type="password" id="groq-key" placeholder="gsk_xxxxxxxxxxxx" oninput="checkKey()">
+      <div class="key-status" id="key-status"></div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="hero">
+    <div class="hero-tag"><span></span>DETECT + HUMANIZE</div>
+    <h1>AI Content <span class="hl">Detector</span> &amp; Humanizer</h1>
+    <p>Powered by RoBERTa ML model for detection and Groq LLaMA for humanization. No content is stored or sent to any server except Groq for rewriting.</p>
+  </div>
+
+  <div class="steps" id="steps-bar">
+    <div class="step active" id="step-1"><div class="step-num">1</div> Paste Text</div>
+    <div class="step" id="step-2"><div class="step-num">2</div> Scan</div>
+    <div class="step" id="step-3"><div class="step-num">3</div> Humanize</div>
+    <div class="step" id="step-4"><div class="step-num">4</div> Re-scan</div>
+  </div>
+
+  <!-- Input -->
+  <div class="panel" id="input-panel">
+    <div class="panel-head">
+      <span class="panel-head-label">Input Text</span>
+      <span class="word-count" id="wc">0 words</span>
+    </div>
+    <textarea id="main-input" placeholder="Paste the text you want to check here. Best results with 100+ words...&#10;&#10;Tip: Works on essays, articles, assignments, emails — any written content." oninput="updateWC()"></textarea>
+    <div class="panel-foot">
+      <div>
+        <div class="model-status" id="model-status" style="display:none">
+          <div class="spinner"></div>
+          <span id="model-status-text">Loading AI detection model (~50MB, one time)...</span>
+        </div>
+        <span class="hint" id="foot-hint">Minimum 30 words for reliable results</span>
+      </div>
+      <button class="btn-primary" id="scan-btn" onclick="startScan()">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.4"/><path d="M7 4.5V7.5L8.5 9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Scan for AI
+      </button>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div class="error-box" id="err-box"></div>
+
+  <!-- Loading -->
+  <div class="loader-wrap" id="loader">
+    <div class="loader-bar"><div class="loader-fill"></div></div>
+    <div class="loader-text" id="loader-text">LOADING MODEL...</div>
+  </div>
+
+  <!-- Results -->
+  <div id="results-section" style="display:none">
+
+    <!-- Score Row -->
+    <div class="panel" style="padding:1.25rem 1.5rem;margin-bottom:1rem">
+      <div class="score-wrap">
+        <div class="circle-outer">
+          <svg viewBox="0 0 110 110">
+            <circle class="circle-bg" cx="55" cy="55" r="46"/>
+            <circle class="circle-fg" id="score-ring" cx="55" cy="55" r="46" stroke-dasharray="289" stroke-dashoffset="289" stroke="var(--green)"/>
+          </svg>
+          <div class="circle-inner">
+            <div class="circle-val" id="score-val">—</div>
+            <div class="circle-lbl">AI Score</div>
+          </div>
+        </div>
+        <div>
+          <div class="verdict-pill verd-human" id="verdict-pill"><span class="dot"></span><span id="verdict-lbl">—</span></div>
+          <p class="verdict-desc" id="verdict-desc"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Meters -->
+    <div class="meters">
+      <div class="meter-card">
+        <div class="meter-lbl">AI Probability</div>
+        <div class="meter-val" id="m-ai" style="color:var(--red)">—</div>
+        <div class="meter-track"><div class="meter-fill" id="mf-ai" style="background:var(--red);width:0%"></div></div>
+      </div>
+      <div class="meter-card">
+        <div class="meter-lbl">Mixed / Edited</div>
+        <div class="meter-val" id="m-mix" style="color:var(--orange)">—</div>
+        <div class="meter-track"><div class="meter-fill" id="mf-mix" style="background:var(--orange);width:0%"></div></div>
+      </div>
+      <div class="meter-card">
+        <div class="meter-lbl">Human Written</div>
+        <div class="meter-val" id="m-hum" style="color:var(--green)">—</div>
+        <div class="meter-track"><div class="meter-fill" id="mf-hum" style="background:var(--green);width:0%"></div></div>
+      </div>
+    </div>
+
+    <!-- Sentence Analysis -->
+    <div class="panel" style="margin-bottom:1rem">
+      <div class="panel-head">
+        <span class="panel-head-label">Sentence Analysis</span>
+        <div class="sent-legend">
+          <div class="leg-item"><div class="leg-dot" style="background:var(--green)"></div>Human</div>
+          <div class="leg-item"><div class="leg-dot" style="background:var(--orange)"></div>Mixed</div>
+          <div class="leg-item"><div class="leg-dot" style="background:var(--red)"></div>AI</div>
+        </div>
+      </div>
+      <div class="highlighted-body" id="sent-body"></div>
+    </div>
+
+    <!-- Signals -->
+    <div class="panel" style="padding:16px;margin-bottom:1rem">
+      <div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:12px">Signals Detected</div>
+      <div id="signals-list"></div>
+    </div>
+
+    <!-- Humanize CTA -->
+    <div class="panel" style="padding:1.25rem 1.5rem;margin-bottom:1rem;background:var(--blue-dim);border-color:rgba(96,165,250,0.2)" id="humanize-cta">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div>
+          <div style="font-weight:600;font-size:15px;margin-bottom:4px">Humanize this text</div>
+          <div style="font-size:13px;color:var(--muted2)">Rewrite using Groq AI to reduce AI detection score. Requires Groq API key.</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn-secondary" onclick="resetAll()">Start Over</button>
+          <button class="btn-humanize" id="humanize-btn" onclick="humanizeText()">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M7 2l5 5-5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Humanize Text
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Humanizing loader -->
+  <div class="loader-wrap" id="humanize-loader">
+    <div class="loader-bar"><div class="loader-fill" style="background:var(--blue)"></div></div>
+    <div class="loader-text">HUMANIZING TEXT WITH GROQ...</div>
+  </div>
+
+  <!-- Humanized Result -->
+  <div id="humanized-section" style="display:none">
+
+    <div class="score-compare" id="score-compare">
+      <div class="sc-item">
+        <div class="sc-label">Before</div>
+        <div class="sc-val" id="sc-before" style="color:var(--red)">—</div>
+      </div>
+      <div class="sc-arrow">→</div>
+      <div class="sc-item">
+        <div class="sc-label">After</div>
+        <div class="sc-val" id="sc-after" style="color:var(--green)">—</div>
+      </div>
+      <div class="improvement" id="improvement-badge">—</div>
+    </div>
+
+    <div class="before-after">
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-head-label">Original (AI)</span>
+        </div>
+        <div class="humanized-text" id="original-text-display" style="color:var(--muted2);font-size:14px;max-height:240px;overflow-y:auto"></div>
+      </div>
+      <div class="panel" style="border-color:rgba(74,222,128,0.25)">
+        <div class="panel-head" style="border-color:rgba(74,222,128,0.15)">
+          <span class="panel-head-label" style="color:var(--green)">Humanized</span>
+          <button class="btn-copy" id="copy-btn" onclick="copyHumanized()">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="4" y="4" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.2"/><path d="M1 8V2a1 1 0 011-1h6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+            Copy
+          </button>
+        </div>
+        <div class="humanized-text" id="humanized-text-display" style="max-height:240px;overflow-y:auto"></div>
+      </div>
+    </div>
+
+    <!-- Re-scan result -->
+    <div id="rescan-panel" style="display:none">
+      <div class="panel" style="padding:1.25rem 1.5rem;margin-bottom:1rem">
+        <div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:14px">Re-scan Result (Humanized Text)</div>
+        <div class="score-wrap">
+          <div class="circle-outer">
+            <svg viewBox="0 0 110 110">
+              <circle class="circle-bg" cx="55" cy="55" r="46"/>
+              <circle class="circle-fg" id="rescan-ring" cx="55" cy="55" r="46" stroke-dasharray="289" stroke-dashoffset="289" stroke="var(--green)"/>
+            </svg>
+            <div class="circle-inner">
+              <div class="circle-val" id="rescan-val">—</div>
+              <div class="circle-lbl">AI Score</div>
+            </div>
+          </div>
+          <div>
+            <div class="verdict-pill verd-human" id="rescan-pill"><span class="dot"></span><span id="rescan-lbl">—</span></div>
+            <p class="verdict-desc" id="rescan-desc"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-bottom:1rem">
+      <button class="btn-secondary" onclick="resetAll()">Start Over</button>
+      <button class="btn-humanize" id="humanize-again-btn" onclick="humanizeAgain()">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7a5 5 0 0110 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M12 7l-2-2M12 7l-2 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Humanize Again
+      </button>
+    </div>
+  </div>
+
+  <div class="disclaimer">
+    Detection uses the <strong>RoBERTa OpenAI detector</strong> model via Transformers.js — runs 100% in your browser.<br>
+    Humanization uses <strong>Groq's LLaMA 3</strong> API. No text is stored. Results are probabilistic — not legal proof.
+  </div>
+</main>
+
+<script type="module" src="script.js"></script>
+</body>
+</html>

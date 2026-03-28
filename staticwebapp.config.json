@@ -1,0 +1,36 @@
+{
+  "routes": [
+    {
+      "route": "/*",
+      "serve": "index.html",
+      "statusCode": 200
+    },
+    {
+      "route": "/api/*",
+      "allowedRoles": ["authenticated", "anonymous"]
+    }
+  ],
+  "navigationFallback": {
+    "rewrite": "index.html",
+    "exclude": ["/api/*", "*.{css,gif,ico,jpg,js,png,svg,webp}"]
+  },
+  "responseOverrides": {
+    "404": {
+      "rewrite": "/index.html"
+    }
+  },
+  "auth": {
+    "identityProviders": {
+      "github": {
+        "registration": {
+          "openIdConnectConfig": {
+            "wellKnownOpenIdConfiguration": ""
+          }
+        }
+      }
+    }
+  },
+  "mimeTypes": {
+    ".json": "application/json"
+  }
+}
