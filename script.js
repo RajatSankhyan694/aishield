@@ -9,7 +9,7 @@ let originalScore = 0;
 const keyInput = document.getElementById('groq-key');
 const keyStatus = document.getElementById('key-status');
 
-// Load saved key
+// Load saved key from browser storage
 const savedKey = localStorage.getItem('groq_key');
 if (savedKey) { keyInput.value = savedKey; keyStatus.classList.add('ok'); }
 
@@ -431,7 +431,20 @@ function hideError() {
 }
 window.showError = showError;
 
-// Preload model in background after page load
+// ─── Preload model in background (starts immediately) ────────────────────────
+let preloadStartTime = null;
+
 window.addEventListener('load', () => {
-  setTimeout(() => loadModel().catch(() => {}), 2000);
+  preloadStartTime = Date.now();
+  console.log('🚀 Starting background model preload...');
+  
+  // Start loading immediately (no delay)
+  loadModel()
+    .then(() => {
+      const elapsed = Date.now() - preloadStartTime;
+      console.log(`✅ Model preloaded successfully in ${(elapsed/1000).toFixed(1)}s`);
+    })
+    .catch((e) => {
+      console.warn('⚠️  Background preload failed (will retry on scan):', e);
+    });
 });
