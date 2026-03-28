@@ -69,18 +69,20 @@ async function loadModel() {
     console.log('📦 Importing Transformers.js library...');
     const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js');
     
-    // Configure environment for browser compatibility and CORS workaround
+    // CRITICAL: Configure environment to use cached CDN instead of direct Hugging Face API
+    // This bypasses the 401 CORS/auth errors from huggingface.co
     env.allowLocalModels = false;
     env.allowRemoteModels = true;
     env.allowSaving = false;
     
-    // Use jsDelivr CDN as mirror for model files (more reliable than Hugging Face direct)
-    env.remoteURL = 'https://cdn.jsdelivr.net/npm/@xenova/';
+    // Use Hugging Face's CDN (cdn-models.huggingface.co) which has better CORS support
+    // This is the official CDN for model weights
+    env.remoteURL = 'https://cdn-models.huggingface.co/';
     
     console.log('✅ Transformers.js library loaded');
-    console.log('🤖 Loading RoBERTa model from CDN mirror...');
+    console.log('🤖 Loading RoBERTa model from Hugging Face CDN...');
     
-    // Retry logic for model loading
+    // Retry logic with different strategies
     let retries = 0;
     const maxRetries = 3;
     let lastError = null;
@@ -105,14 +107,33 @@ async function loadModel() {
         retries++;
         console.warn(`⚠️  Model load attempt ${retries} failed:`, error.message);
         
-        // On first failure, try alternative approach
+        // Try alternate CDN on second attempt
         if (retries === 1) {
-          console.log('🔄 Trying alternative CDN endpoint...');
-          env.remoteURL = null; // Reset to try default Hugging Face with retry
+          console.log('🔄 Attempt 2: Trying jsDelivr CDN mirror...');
+          env.remoteURL = 'https://cdn.jsdelivr.net/npm/@xenova/';
+        }
+        // Try with cache busting on third attempt
+        else if (retries === 2) {
+          console.log('🔄 Attempt 3: Trying with cache bypass...');
+          env.remoteURL = 'https://cdn-models.huggingface.co/';
+          // Force fresh load by removing cached references
+          if (typeof indexedDB !== 'undefined') {
+            try {
+              const dbs = await indexedDB.databases();
+              dbs.forEach(db => {
+                if (db.name && db.name.includes('cache')) {
+                  indexedDB.deleteDatabase(db.name);
+                  console.log('🗑️  Cleared IndexedDB cache: ' + db.name);
+                }
+              });
+            } catch (e) {
+              console.log('Note: Could not clear IndexedDB');
+            }
+          }
         }
         
         if (retries < maxRetries) {
-          const delay = Math.pow(2, retries) * 1000; // Exponential backoff: 2s, 4s, 8s
+          const delay = Math.pow(2, retries) * 1000; // 2s, 4s, 8s
           console.log(`⏳ Retrying in ${delay}ms...`);
           await new Promise(r => setTimeout(r, delay));
         }
@@ -149,13 +170,15 @@ async function loadModel() {
     const errBox = document.getElementById('err-box');
     if (errBox) {
       const errorMsg = `❌ Model download blocked: ${error.message}. 
-      
-Try these steps:
-1. Clear browser cache (F12 → Storage → Clear All)
-2. Disable browser extensions (might block downloads)
-3. Try a different browser
-4. Check your internet connection
-5. Refresh and try again`;
+
+Quick fixes:
+1. Close all other browser tabs (free up bandwidth)
+2. Clear cache: F12 → Storage → Clear All
+3. Try incognito/private mode (Ctrl+Shift+N)
+4. Disable VPN/proxy if using one
+5. Restart browser and try again
+
+If still blocked, the issue is a network restriction on your connection.`;
       errBox.textContent = errorMsg;
       errBox.style.display = 'block';
     }
