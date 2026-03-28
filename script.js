@@ -42,57 +42,101 @@ async function loadModel() {
     return detector;
   }
   modelLoading = true;
-  document.getElementById('model-status').style.display = 'flex';
-  document.getElementById('foot-hint').style.display = 'none';
 
-  // Simulate progress with realistic timing
-  let progress = 0;
-  const progressInterval = setInterval(() => {
-    if (progress < 95) {
-      progress += Math.random() * 30;
-      updateProgressBar(Math.min(progress, 95));
+  try {
+    const statusEl = document.getElementById('model-status');
+    const hintEl = document.getElementById('foot-hint');
+    
+    if (!statusEl) {
+      console.error('❌ model-status element not found');
+      throw new Error('Model status UI element missing');
     }
-  }, 300);
 
-  const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js');
-  env.allowLocalModels = false;
+    statusEl.style.display = 'flex';
+    if (hintEl) hintEl.style.display = 'none';
 
-  detector = await pipeline('text-classification', 'Xenova/roberta-base-openai-detector', { quantized: true });
+    console.log('🚀 Starting model download from Hugging Face...');
 
-  // Complete the progress bar
-  clearInterval(progressInterval);
-  updateProgressBar(100);
+    // Simulate progress with realistic timing
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+      if (progress < 95) {
+        progress += Math.random() * 30;
+        updateProgressBar(Math.min(progress, 95));
+      }
+    }, 300);
 
-  // Brief pause to show 100%
-  await new Promise(r => setTimeout(r, 500));
+    console.log('📦 Importing Transformers.js library...');
+    const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js');
+    env.allowLocalModels = false;
+    console.log('✅ Transformers.js library loaded');
 
-  modelLoading = false;
-  document.getElementById('model-status').style.display = 'none';
-  document.getElementById('foot-hint').style.display = 'block';
-  return detector;
+    console.log('🤖 Loading RoBERTa model from Hugging Face...');
+    detector = await pipeline('text-classification', 'Xenova/roberta-base-openai-detector', { quantized: true });
+    console.log('✅ RoBERTa model loaded successfully');
+
+    // Complete the progress bar
+    clearInterval(progressInterval);
+    updateProgressBar(100);
+    console.log('📊 Progress: 100%');
+
+    // Brief pause to show 100%
+    await new Promise(r => setTimeout(r, 500));
+
+    modelLoading = false;
+    statusEl.style.display = 'none';
+    if (hintEl) hintEl.style.display = 'block';
+    console.log('✅ Model ready for use');
+    
+    return detector;
+  } catch (error) {
+    console.error('❌ Model loading failed:', error);
+    modelLoading = false;
+    const statusEl = document.getElementById('model-status');
+    const hintEl = document.getElementById('foot-hint');
+    if (statusEl) statusEl.style.display = 'none';
+    if (hintEl) hintEl.style.display = 'block';
+    
+    // Show error to user
+    const errBox = document.getElementById('err-box');
+    if (errBox) {
+      errBox.textContent = '❌ Failed to load AI model. Check your internet connection and try again.';
+      errBox.style.display = 'block';
+    }
+    throw error;
+  }
 }
 
 // ─── Progress bar helper ──────────────────────────────────────────────────────
 function updateProgressBar(percent) {
-  const bar = document.getElementById('progress-bar');
-  const percentSpan = document.getElementById('progress-percent');
-  
-  bar.style.width = percent + '%';
-  percentSpan.textContent = Math.round(percent) + '%';
-  
-  // Color: red (0%) → yellow (50%) → green (100%)
-  if (percent < 50) {
-    const ratio = percent / 50;
-    const r = 255;
-    const g = Math.round(165 * ratio);
-    const b = 0;
-    bar.style.background = `rgb(${r}, ${g}, ${b})`;
-  } else {
-    const ratio = (percent - 50) / 50;
-    const r = Math.round(255 * (1 - ratio));
-    const g = 165 + Math.round(90 * ratio);
-    const b = 0;
-    bar.style.background = `rgb(${r}, ${g}, ${b})`;
+  try {
+    const bar = document.getElementById('progress-bar');
+    const percentSpan = document.getElementById('progress-percent');
+    
+    if (!bar || !percentSpan) {
+      console.warn('⚠️  Progress bar elements not found');
+      return;
+    }
+    
+    bar.style.width = percent + '%';
+    percentSpan.textContent = Math.round(percent) + '%';
+    
+    // Color: red (0%) → yellow (50%) → green (100%)
+    if (percent < 50) {
+      const ratio = percent / 50;
+      const r = 255;
+      const g = Math.round(165 * ratio);
+      const b = 0;
+      bar.style.background = `rgb(${r}, ${g}, ${b})`;
+    } else {
+      const ratio = (percent - 50) / 50;
+      const r = Math.round(255 * (1 - ratio));
+      const g = 165 + Math.round(90 * ratio);
+      const b = 0;
+      bar.style.background = `rgb(${r}, ${g}, ${b})`;
+    }
+  } catch (error) {
+    console.error('Error updating progress bar:', error);
   }
 }
 
