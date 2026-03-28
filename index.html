@@ -53,8 +53,11 @@
     <div class="panel-foot">
       <div>
         <div class="model-status" id="model-status" style="display:none">
-          <div class="spinner"></div>
-          <span id="model-status-text">Loading AI detection model (~50MB, one time)...</span>
+          <div class="progress-container">
+            <div class="progress-bar" id="progress-bar"></div>
+          </div>
+          <span id="model-status-text">Downloading model (~50MB, one-time only)...</span>
+          <span id="progress-percent">0%</span>
         </div>
         <span class="hint" id="foot-hint">Minimum 30 words for reliable results</span>
       </div>

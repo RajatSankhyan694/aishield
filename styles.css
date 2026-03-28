@@ -147,8 +147,10 @@ textarea::placeholder{color:var(--muted)}
 .disclaimer{text-align:center;font-size:11px;color:var(--muted);padding-top:1.5rem;line-height:1.7;border-top:1px solid var(--border);margin-top:1.5rem}
 
 /* MODEL LOADING */
-.model-status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);padding:8px 0}
-.model-status .spinner{width:12px;height:12px;border:2px solid var(--border2);border-top-color:var(--green);border-radius:50%;animation:spin .6s linear infinite}
+.model-status{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--muted);padding:8px 0;flex-direction:column;align-items:flex-start}
+.progress-container{width:100%;height:8px;background:var(--border1);border-radius:4px;overflow:hidden}
+.progress-bar{height:100%;width:0%;background:rgb(255,0,0);transition:width .2s ease;border-radius:4px}
+#progress-percent{font-size:11px;color:var(--muted);font-weight:500}
 @keyframes spin{to{transform:rotate(360deg)}}
 
 @media(max-width:600px){

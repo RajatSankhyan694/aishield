@@ -45,16 +45,55 @@ async function loadModel() {
   document.getElementById('model-status').style.display = 'flex';
   document.getElementById('foot-hint').style.display = 'none';
 
+  // Simulate progress with realistic timing
+  let progress = 0;
+  const progressInterval = setInterval(() => {
+    if (progress < 95) {
+      progress += Math.random() * 30;
+      updateProgressBar(Math.min(progress, 95));
+    }
+  }, 300);
+
   const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js');
   env.allowLocalModels = false;
 
-  document.getElementById('model-status-text').textContent = 'Downloading model (~50MB, one-time only)...';
   detector = await pipeline('text-classification', 'Xenova/roberta-base-openai-detector', { quantized: true });
+
+  // Complete the progress bar
+  clearInterval(progressInterval);
+  updateProgressBar(100);
+
+  // Brief pause to show 100%
+  await new Promise(r => setTimeout(r, 500));
 
   modelLoading = false;
   document.getElementById('model-status').style.display = 'none';
   document.getElementById('foot-hint').style.display = 'block';
   return detector;
+}
+
+// ─── Progress bar helper ──────────────────────────────────────────────────────
+function updateProgressBar(percent) {
+  const bar = document.getElementById('progress-bar');
+  const percentSpan = document.getElementById('progress-percent');
+  
+  bar.style.width = percent + '%';
+  percentSpan.textContent = Math.round(percent) + '%';
+  
+  // Color: red (0%) → yellow (50%) → green (100%)
+  if (percent < 50) {
+    const ratio = percent / 50;
+    const r = 255;
+    const g = Math.round(165 * ratio);
+    const b = 0;
+    bar.style.background = `rgb(${r}, ${g}, ${b})`;
+  } else {
+    const ratio = (percent - 50) / 50;
+    const r = Math.round(255 * (1 - ratio));
+    const g = 165 + Math.round(90 * ratio);
+    const b = 0;
+    bar.style.background = `rgb(${r}, ${g}, ${b})`;
+  }
 }
 
 // ─── Heuristic scorer (per-sentence) ─────────────────────────────────────────
