@@ -68,12 +68,52 @@ async function loadModel() {
 
     console.log('📦 Importing Transformers.js library...');
     const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js');
+    
+    // Configure environment for better browser compatibility
     env.allowLocalModels = false;
+    env.allowRemoteModels = true;
+    env.allowSaving = false;
+    
     console.log('✅ Transformers.js library loaded');
 
     console.log('🤖 Loading RoBERTa model from Hugging Face...');
-    detector = await pipeline('text-classification', 'Xenova/roberta-base-openai-detector', { quantized: true });
-    console.log('✅ RoBERTa model loaded successfully');
+    
+    // Retry logic for model loading
+    let retries = 0;
+    const maxRetries = 3;
+    let lastError = null;
+
+    while (retries < maxRetries) {
+      try {
+        detector = await pipeline('text-classification', 'Xenova/roberta-base-openai-detector', { 
+          quantized: true,
+          progress_callback: (data) => {
+            // Track download progress
+            if (data.progress !== undefined) {
+              const downloadProgress = Math.min(95, 50 + (data.progress * 45));
+              updateProgressBar(downloadProgress);
+              console.log(`📥 Download progress: ${Math.round(downloadProgress)}%`);
+            }
+          }
+        });
+        console.log('✅ RoBERTa model loaded successfully');
+        break;
+      } catch (error) {
+        lastError = error;
+        retries++;
+        console.warn(`⚠️  Model load attempt ${retries} failed:`, error.message);
+        
+        if (retries < maxRetries) {
+          const delay = Math.pow(2, retries) * 1000; // Exponential backoff: 2s, 4s
+          console.log(`⏳ Retrying in ${delay}ms...`);
+          await new Promise(r => setTimeout(r, delay));
+        }
+      }
+    }
+
+    if (!detector && lastError) {
+      throw new Error(`Failed to load model after ${maxRetries} attempts: ${lastError.message}`);
+    }
 
     // Complete the progress bar
     clearInterval(progressInterval);
@@ -100,7 +140,7 @@ async function loadModel() {
     // Show error to user
     const errBox = document.getElementById('err-box');
     if (errBox) {
-      errBox.textContent = '❌ Failed to load AI model. Check your internet connection and try again.';
+      errBox.textContent = '❌ Model download failed. This usually means: (1) Internet connection issue, (2) Hugging Face API is temporarily unavailable, or (3) Browser cache is full. Try: refreshing the page, clearing browser cache (F12 → Storage → Clear All), or trying again in a few minutes.';
       errBox.style.display = 'block';
     }
     throw error;
