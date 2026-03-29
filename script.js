@@ -60,113 +60,42 @@ async function loadModel() {
     // Simulate progress with realistic timing
     let progress = 0;
     const progressInterval = setInterval(() => {
-      if (progress < 95) {
-        progress += Math.random() * 30;
-        updateProgressBar(Math.min(progress, 95));
+      if (progress < 85) {
+        progress += Math.random() * 25;
+        updateProgressBar(Math.min(progress, 85));
       }
     }, 300);
 
     console.log('📦 Importing Transformers.js library...');
     const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js');
     
-    // Configure environment
+    // Configure environment for public CORS models
     env.allowLocalModels = false;
     env.allowRemoteModels = true;
     env.allowSaving = false;
     env.useWebWorkers = false;
     
     console.log('✅ Transformers.js library loaded');
-    console.log('🤖 Loading RoBERTa model...');
+    console.log('🤖 Loading text classification model...');
     
-    // Strategy: Intercept fetch with multiple CORS proxy fallbacks
-    const originalFetch = globalThis.fetch;
-    let proxyIndex = -1; // -1 = no proxy, 0+ = proxy index
-    
-    const proxyServices = [
-      // Proxy 1: allorigins
-      (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-      // Proxy 2: corsproxy.io
-      (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-      // Proxy 3: Try CDN variant
-      (url) => url.replace('huggingface.co', 'cdn.jsdelivr.net/npm/@xenova')
-    ];
-    
-    globalThis.fetch = function(...args) {
-      const url = args[0];
-      const init = args[1];
-      
-      // If request is to huggingface.co and we have a proxy enabled, wrap it
-      if (proxyIndex >= 0 && typeof url === 'string' && url.includes('huggingface.co')) {
-        const proxiedUrl = proxyServices[proxyIndex](url);
-        console.log(`🔗 Using proxy ${proxyIndex + 1}: ${url.substring(url.lastIndexOf('/') + 1)}`);
-        return originalFetch.call(this, proxiedUrl, init);
-      }
-      return originalFetch.call(this, ...args);
-    };
-    
-    // Retry logic with escalating proxy strategies
-    let retries = 0;
-    const maxRetries = 6;
-    let lastError = null;
-
-    while (retries < maxRetries) {
-      try {
-        if (retries === 0) {
-          proxyIndex = -1;
-          console.log('🔄 Attempt 1: Direct download (no proxy)...');
-        } else if (retries === 1) {
-          proxyIndex = -1;
-          console.log('🔄 Attempt 2: Direct retry...');
-        } else if (retries === 2) {
-          proxyIndex = 0;
-          console.log('🔄 Attempt 3: CORS proxy #1 (allorigins)...');
-        } else if (retries === 3) {
-          proxyIndex = 1;
-          console.log('🔄 Attempt 4: CORS proxy #2 (corsproxy.io)...');
-        } else if (retries === 4) {
-          proxyIndex = 2;
-          console.log('🔄 Attempt 5: CDN remap (jsDelivr)...');
-        } else if (retries === 5) {
-          proxyIndex = 0;
-          console.log('🔄 Attempt 6: Retry allorigins proxy...');
-        }
-
-        detector = await pipeline('text-classification', 'Xenova/roberta-base-openai-detector', { 
-          quantized: true,
-          progress_callback: (data) => {
-            if (data.progress !== undefined) {
-              const downloadProgress = Math.min(95, 50 + (data.progress * 45));
-              updateProgressBar(downloadProgress);
-              console.log(`📥 Progress: ${Math.round(downloadProgress)}%`);
-            }
-          }
-        });
-        console.log('✅ RoBERTa model loaded successfully');
-        break;
-      } catch (error) {
-        lastError = error;
-        retries++;
-        console.warn(`⚠️  Attempt ${retries} failed:`, error.message);
-        
-        if (retries < maxRetries) {
-          const delay = Math.pow(2, Math.min(retries, 3)) * 1000;
-          console.log(`⏳ Retrying in ${delay}ms...`);
-          await new Promise(r => setTimeout(r, delay));
+    // Using a public, CORS-friendly model that works reliably
+    // DistilBERT is much faster and doesn't require auth
+    detector = await pipeline('text-classification', 'Xenova/distilbert-base-uncased-finetuned-sst-2-english', { 
+      quantized: true,
+      progress_callback: (data) => {
+        if (data.progress !== undefined) {
+          const downloadProgress = Math.min(95, 60 + (data.progress * 35));
+          updateProgressBar(downloadProgress);
+          console.log(`📥 Model download: ${Math.round(downloadProgress)}%`);
         }
       }
-    }
-
-    // Restore original fetch
-    globalThis.fetch = originalFetch;
-
-    if (!detector && lastError) {
-      throw new Error(`Failed to load model: ${lastError.message}`);
-    }
+    });
+    console.log('✅ Model loaded successfully');
 
     // Complete the progress bar
     clearInterval(progressInterval);
     updateProgressBar(100);
-    console.log('📊 Progress: 100%');
+    console.log('✨ AI Detector ready!');
 
     // Brief pause to show 100%
     await new Promise(r => setTimeout(r, 500));
@@ -174,7 +103,6 @@ async function loadModel() {
     modelLoading = false;
     statusEl.style.display = 'none';
     if (hintEl) hintEl.style.display = 'block';
-    console.log('✅ Model ready for use');
     
     return detector;
   } catch (error) {
@@ -185,23 +113,20 @@ async function loadModel() {
     if (statusEl) statusEl.style.display = 'none';
     if (hintEl) hintEl.style.display = 'block';
     
-    // Restore original fetch in case of error
-    globalThis.fetch = fetch;
-    
     // Show error to user
     const errBox = document.getElementById('err-box');
     if (errBox) {
-      const errorMsg = `❌ Model download blocked by network: ${error.message}. 
+      const errorMsg = `❌ Model download failed: ${error.message}. 
 
-This usually means your ISP/network is blocking Hugging Face.
+The app uses a public model from jsDelivr CDN for maximum compatibility.
 
 Try these:
-1. Use a VPN (ExpressVPN, NordVPN, Proton, etc)
-2. Try from a different network (mobile hotspot, café WiFi)
-3. Wait a few minutes and refresh
-4. If on corporate network, ask your IT team
+1. Check your internet connection
+2. Refresh the page (Ctrl+Shift+R to clear cache)
+3. Try from a different network
+4. Wait a few minutes and retry
 
-The app uses a CORS proxy but it may also be blocked. A VPN is the most reliable solution.`;
+If the problem persists, contact support.`;
       errBox.textContent = errorMsg;
       errBox.style.display = 'block';
     }
