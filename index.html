@@ -50,6 +50,24 @@
       <span class="word-count" id="wc">0 words</span>
     </div>
     <textarea id="main-input" placeholder="Paste the text you want to check here. Best results with 100+ words...&#10;&#10;Tip: Works on essays, articles, assignments, emails — any written content." oninput="updateWC()"></textarea>
+    
+    <!-- File Upload Section -->
+    <div class="file-upload-section">
+      <div class="file-divider">OR</div>
+      <div class="file-input-wrapper">
+        <input type="file" id="file-input" accept=".doc,.docx,.txt,.pdf" onchange="handleFileSelect()" hidden>
+        <label for="file-input" class="btn-file-upload">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          Upload Word, Doc, or PDF
+        </label>
+        <span class="file-info" id="file-info"></span>
+      </div>
+    </div>
+    
     <div class="panel-foot">
       <div>
         <div class="model-status" id="model-status" style="display:none">
