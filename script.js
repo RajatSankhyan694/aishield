@@ -382,7 +382,7 @@ async function runScan(text, isRescan) {
 
     if (!isRescan) {
       originalScore = blendedScore;
-      renderResults(blendedScore, text);
+      renderResults(blendedScore, text, aiScore);
       setStep(3);
     } else {
       renderRescan(blendedScore);
@@ -422,7 +422,7 @@ function splitSentences(text) {
 }
 
 // ─── Render results ───────────────────────────────────────────────────────────
-function renderResults(score, text) {
+function renderResults(score, text, modelScore) {
   // Circle
   const circumference = 289;
   const offset = circumference - (score / 100) * circumference;
@@ -459,13 +459,15 @@ function renderResults(score, text) {
   setMeter('m-mix','mf-mix', mixP);
   setMeter('m-hum','mf-hum', humP);
 
-  // Sentence highlights (aligned with overall verdict thresholds)
+  // Sentence highlights (blended with model + heuristic like overall score)
   const sentences = splitSentences(text);
   const sentHTML = sentences.map(s => {
-    const sc = heuristicScore(s);
-    const cls = sc >= 65 ? 's-ai' : sc >= 40 ? 's-mixed' : 's-human';
-    const tip = sc >= 65 ? 'AI-like' : sc >= 40 ? 'Mixed' : 'Human-like';
-    return `<span class="${cls}" title="${tip} (${sc}% AI)">${s}</span>`;
+    const hScore = heuristicScore(s);
+    // Blend model's overall assessment (70%) with sentence heuristic (30%) for consistency
+    const blendedSentScore = Math.round((modelScore || 50) * 0.7 + hScore * 0.3);
+    const cls = blendedSentScore >= 65 ? 's-ai' : blendedSentScore >= 40 ? 's-mixed' : 's-human';
+    const tip = blendedSentScore >= 65 ? 'AI-like' : blendedSentScore >= 40 ? 'Mixed' : 'Human-like';
+    return `<span class="${cls}" title="${tip} (${blendedSentScore}% AI)">${s}</span>`;
   }).join(' ');
   document.getElementById('sent-body').innerHTML = sentHTML;
 
