@@ -9,6 +9,181 @@ let originalScore = 0;
 const keyInput = document.getElementById('groq-key');
 const keyStatus = document.getElementById('key-status');
 
+// ─── File upload handler ───────────────────────────────────────────────────────
+async function handleFileSelect() {
+  const fileInput = document.getElementById('file-input');
+  const file = fileInput.files[0];
+  
+  if (!file) return;
+  
+  try {
+    const fileInfo = document.getElementById('file-info');
+    fileInfo.textContent = `📄 Processing: ${file.name}...`;
+    
+    let extractedText = '';
+    const fileType = file.type;
+    const fileName = file.name.toLowerCase();
+    
+    if (fileName.endsWith('.txt')) {
+      // Plain text
+      extractedText = await file.text();
+    } else if (fileName.endsWith('.pdf')) {
+      // PDF support via pdfjs
+      extractedText = await extractTextFromPDF(file);
+    } else if (fileName.endsWith('.docx')) {
+      // DOCX support via mammoth.js
+      extractedText = await extractTextFromDocx(file);
+    } else if (fileName.endsWith('.doc')) {
+      // DOC - treat as binary, basic extraction
+      extractedText = await extractTextFromDoc(file);
+    } else {
+      throw new Error('Unsupported file format. Use .txt, .pdf, .docx, or .doc');
+    }
+    
+    // Validate extracted text
+    if (!extractedText || extractedText.trim().length < 10) {
+      throw new Error('Could not extract enough text from file. Try a different file.');
+    }
+    
+    // Put text into textarea
+    const textarea = document.getElementById('main-input');
+    textarea.value = extractedText;
+    updateWC();
+    
+    fileInfo.textContent = `✅ Loaded: ${file.name} (${extractedText.length} characters)`;
+    console.log(`📂 File loaded: ${file.name}`);
+  } catch (error) {
+    console.error('❌ File upload error:', error);
+    const fileInfo = document.getElementById('file-info');
+    fileInfo.textContent = `❌ Error: ${error.message}`;
+    fileInfo.style.color = 'var(--red)';
+  }
+}
+
+// Extract text from DOCX (uses Office Open XML format)
+async function extractTextFromDocx(file) {
+  try {
+    // Load mammoth.js from CDN
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js';
+    
+    return new Promise((resolve, reject) => {
+      script.onload = async () => {
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const result = await mammoth.extractRawText({ arrayBuffer });
+          resolve(result.value);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      script.onerror = () => reject(new Error('Failed to load DOCX parser'));
+      document.head.appendChild(script);
+    });
+  } catch (error) {
+    throw new Error(`DOCX parsing failed: ${error.message}`);
+  }
+}
+
+// Extract text from PDF
+async function extractTextFromPDF(file) {
+  try {
+    // Load PDF.js from CDN
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+    
+    return new Promise((resolve, reject) => {
+      script.onload = async () => {
+        try {
+          window.pdfjsWorker = {
+            workerSrc: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
+          };
+          window.PDFWorkerOptions = window.pdfjsWorker;
+          
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          
+          let fullText = '';
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items.map(item => item.str).join(' ');
+            fullText += pageText + '\n';
+          }
+          
+          resolve(fullText);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      script.onerror = () => reject(new Error('Failed to load PDF parser'));
+      document.head.appendChild(script);
+    });
+  } catch (error) {
+    throw new Error(`PDF parsing failed: ${error.message}`);
+  }
+}
+
+// Extract text from DOC (legacy Word format)
+async function extractTextFromDoc(file) {
+  try {
+    // For legacy .doc files, we'll use a basic approach
+    // Try to extract text using docx library that also handles older formats
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.js';
+    
+    return new Promise((resolve, reject) => {
+      script.onload = async () => {
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          // For .doc files, attempt basic binary text extraction
+          const text = extractBinaryText(new Uint8Array(arrayBuffer));
+          if (text.length > 20) {
+            resolve(text);
+          } else {
+            reject(new Error('Could not extract text from .doc file. Try .docx instead.'));
+          }
+        } catch (err) {
+          reject(err);
+        }
+      };
+      script.onerror = () => {
+        // Fallback: try basic binary extraction
+        file.arrayBuffer().then(ab => {
+          const text = extractBinaryText(new Uint8Array(ab));
+          if (text.length > 20) {
+            resolve(text);
+          } else {
+            reject(new Error('Could not extract text from .doc file'));
+          }
+        }).catch(reject);
+      };
+      document.head.appendChild(script);
+    });
+  } catch (error) {
+    throw new Error(`DOC parsing failed: ${error.message}`);
+  }
+}
+
+// Basic binary text extraction (fallback for .doc files)
+function extractBinaryText(buffer) {
+  // Look for printable ASCII characters in the binary buffer
+  const text = Array.from(buffer)
+    .map(byte => {
+      // Keep printable ASCII and common unicode ranges
+      if ((byte >= 32 && byte <= 126) || byte > 127) {
+        return String.fromCharCode(byte);
+      }
+      return '';
+    })
+    .join('')
+    .replace(/[^\w\s.,!?;:'\-–—]/g, ' ') // Remove non-text chars
+    .replace(/\s+/g, ' ') // Clean whitespace
+    .trim();
+  
+  return text;
+}
+
 // Load saved key from browser storage
 const savedKey = localStorage.getItem('groq_key');
 if (savedKey) { keyInput.value = savedKey; keyStatus.classList.add('ok'); }
