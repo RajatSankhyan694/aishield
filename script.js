@@ -459,12 +459,12 @@ function renderResults(score, text) {
   setMeter('m-mix','mf-mix', mixP);
   setMeter('m-hum','mf-hum', humP);
 
-  // Sentence highlights
+  // Sentence highlights (aligned with overall verdict thresholds)
   const sentences = splitSentences(text);
   const sentHTML = sentences.map(s => {
     const sc = heuristicScore(s);
-    const cls = sc >= 50 ? 's-ai' : sc >= 25 ? 's-mixed' : 's-human';
-    const tip = sc >= 50 ? 'AI-like' : sc >= 25 ? 'Mixed' : 'Human-like';
+    const cls = sc >= 65 ? 's-ai' : sc >= 40 ? 's-mixed' : 's-human';
+    const tip = sc >= 65 ? 'AI-like' : sc >= 40 ? 'Mixed' : 'Human-like';
     return `<span class="${cls}" title="${tip} (${sc}% AI)">${s}</span>`;
   }).join(' ');
   document.getElementById('sent-body').innerHTML = sentHTML;
