@@ -194,7 +194,20 @@ async function loadModel() {
     }, 300);
 
     console.log('📦 Importing Transformers.js library...');
+    
+    // Suppress CDN content-length warnings (cosmetic issue, doesn't affect functionality)
+    const originalWarn = console.warn;
+    console.warn = function(...args) {
+      const msg = args.join(' ');
+      if (!msg.includes('content-length')) {
+        originalWarn.apply(console, args);
+      }
+    };
+    
     const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js');
+    
+    // Restore console.warn
+    console.warn = originalWarn;
     
     // Configure environment for public CORS models
     env.allowLocalModels = false;
@@ -531,7 +544,8 @@ window.humanizeAgain = () => humanize(humanizedText || originalText);
 async function humanize(text) {
   const key = document.getElementById('groq-key').value.trim();
   if (!key || !key.startsWith('gsk_')) {
-    showError('Please enter a valid Groq API key (starts with gsk_) in the top bar. Get one free at console.groq.com');
+    showError('❌ Please enter a valid Groq API key (starts with gsk_) in the top bar. Get one free at console.groq.com');
+    console.log('❌ No valid Groq key provided');
     return;
   }
 
@@ -542,9 +556,14 @@ async function humanize(text) {
   document.getElementById('humanized-section').style.display = 'none';
 
   try {
+    console.log('🚀 Starting humanization with Groq API...');
+    
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+      headers: { 
+        'Content-Type': 'application/json', 
+        'Authorization': 'Bearer ' + key 
+      },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
         max_tokens: 1500,
@@ -568,9 +587,26 @@ Return ONLY the rewritten text, nothing else.`
       })
     });
 
+    console.log(`📥 Groq API response: ${res.status} ${res.statusText}`);
+    
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(`Groq API returned ${res.status}: ${errData.error?.message || res.statusText}`);
+    }
+
     const data = await res.json();
-    if (data.error) throw new Error(data.error.message);
+    console.log('✅ Received response from Groq API');
+    
+    if (data.error) {
+      throw new Error(data.error.message || JSON.stringify(data.error));
+    }
+    
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      throw new Error('Invalid response format from Groq API');
+    }
+    
     humanizedText = data.choices[0].message.content.trim();
+    console.log(`✅ Humanized text: ${humanizedText.substring(0, 100)}...`);
 
     document.getElementById('original-text-display').textContent = text;
     document.getElementById('humanized-text-display').textContent = humanizedText;
@@ -582,7 +618,9 @@ Return ONLY the rewritten text, nothing else.`
     await runScan(humanizedText, true);
 
   } catch (e) {
-    showError('Groq API error: ' + e.message);
+    const errMsg = `Groq API error: ${e.message}`;
+    showError(errMsg);
+    console.error('❌', errMsg);
     console.error(e);
   } finally {
     document.getElementById('humanize-btn').disabled = false;
