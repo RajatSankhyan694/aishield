@@ -39,7 +39,7 @@ async function handleFileSelect() {
       console.log('✅ Detected: PDF file');
       extractedText = await extractTextFromPDF(file);
     } else {
-      throw new Error('Unsupported file format. Supported: .txt, .docx, .doc (limited support)');
+      throw new Error('Unsupported file format. Supported: .txt, .docx, .doc, .pdf');
     }
     
     // Validate extracted text
@@ -98,12 +98,41 @@ function loadScript(src) {
 // Extract text from PDF
 async function extractTextFromPDF(file) {
   try {
-    // For now, provide a simplified message
-    // Full PDF extraction requires more complex setup
-    console.log('PDF support coming soon. Try .docx or .txt files for now.');
-    throw new Error('PDF extraction requires advanced setup. Please use .docx, .txt, or .doc files.');
+    console.log('Loading PDF.js library...');
+    
+    // Check if pdfjs is already loaded
+    if (typeof window.pdfjsLib === 'undefined') {
+      // Load PDF.js from CDN
+      await loadScript('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js');
+    }
+    
+    // Set up worker
+    if (typeof window.pdfjsWorker === 'undefined') {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+    }
+    
+    console.log('Extracting PDF text...');
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    
+    let fullText = '';
+    console.log(`PDF has ${pdf.numPages} pages`);
+    
+    for (let i = 1; i <= pdf.numPages; i++) {
+      try {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map(item => item.str).join(' ');
+        fullText += pageText + '\n';
+        console.log(`✅ Extracted page ${i}/${pdf.numPages}`);
+      } catch (pageError) {
+        console.warn(`⚠️ Could not extract page ${i}: ${pageError.message}`);
+      }
+    }
+    
+    return fullText;
   } catch (error) {
-    throw error;
+    throw new Error(`PDF parsing failed: ${error.message}`);
   }
 }
 
