@@ -78,44 +78,62 @@ async function loadModel() {
     console.log('✅ Transformers.js library loaded');
     console.log('🤖 Loading RoBERTa model...');
     
-    // Strategy: Intercept fetch to use CORS proxy if needed
+    // Strategy: Intercept fetch with multiple CORS proxy fallbacks
     const originalFetch = globalThis.fetch;
-    let useCorsProxy = false;
+    let proxyIndex = -1; // -1 = no proxy, 0+ = proxy index
+    
+    const proxyServices = [
+      // Proxy 1: allorigins
+      (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+      // Proxy 2: corsproxy.io
+      (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+      // Proxy 3: Try CDN variant
+      (url) => url.replace('huggingface.co', 'cdn.jsdelivr.net/npm/@xenova')
+    ];
     
     globalThis.fetch = function(...args) {
       const url = args[0];
       const init = args[1];
       
-      // If request is to huggingface.co and corsProxy is enabled, wrap it
-      if (useCorsProxy && typeof url === 'string' && url.includes('huggingface.co')) {
-        const proxiedUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-        console.log(`🔄 Using CORS proxy for: ${url.substring(url.lastIndexOf('/') + 1)}`);
+      // If request is to huggingface.co and we have a proxy enabled, wrap it
+      if (proxyIndex >= 0 && typeof url === 'string' && url.includes('huggingface.co')) {
+        const proxiedUrl = proxyServices[proxyIndex](url);
+        console.log(`🔗 Using proxy ${proxyIndex + 1}: ${url.substring(url.lastIndexOf('/') + 1)}`);
         return originalFetch.call(this, proxiedUrl, init);
       }
       return originalFetch.call(this, ...args);
     };
     
-    // Retry logic with different strategies
+    // Retry logic with escalating proxy strategies
     let retries = 0;
-    const maxRetries = 4;
+    const maxRetries = 6;
     let lastError = null;
 
     while (retries < maxRetries) {
       try {
-        // First 2 attempts: direct
-        // Attempt 3+: use CORS proxy
-        if (retries >= 2) {
-          useCorsProxy = true;
-          console.log('🔄 Attempt ' + (retries + 1) + ': Enabling CORS proxy...');
-        } else {
-          useCorsProxy = false;
-          console.log('🔄 Attempt ' + (retries + 1) + ': Trying direct download...');
+        if (retries === 0) {
+          proxyIndex = -1;
+          console.log('🔄 Attempt 1: Direct download (no proxy)...');
+        } else if (retries === 1) {
+          proxyIndex = -1;
+          console.log('🔄 Attempt 2: Direct retry...');
+        } else if (retries === 2) {
+          proxyIndex = 0;
+          console.log('🔄 Attempt 3: CORS proxy #1 (allorigins)...');
+        } else if (retries === 3) {
+          proxyIndex = 1;
+          console.log('🔄 Attempt 4: CORS proxy #2 (corsproxy.io)...');
+        } else if (retries === 4) {
+          proxyIndex = 2;
+          console.log('🔄 Attempt 5: CDN remap (jsDelivr)...');
+        } else if (retries === 5) {
+          proxyIndex = 0;
+          console.log('🔄 Attempt 6: Retry allorigins proxy...');
         }
 
         detector = await pipeline('text-classification', 'Xenova/roberta-base-openai-detector', { 
           quantized: true,
           progress_callback: (data) => {
-            // Track download progress
             if (data.progress !== undefined) {
               const downloadProgress = Math.min(95, 50 + (data.progress * 45));
               updateProgressBar(downloadProgress);
@@ -131,7 +149,7 @@ async function loadModel() {
         console.warn(`⚠️  Attempt ${retries} failed:`, error.message);
         
         if (retries < maxRetries) {
-          const delay = Math.pow(2, retries) * 1000;
+          const delay = Math.pow(2, Math.min(retries, 3)) * 1000;
           console.log(`⏳ Retrying in ${delay}ms...`);
           await new Promise(r => setTimeout(r, delay));
         }
