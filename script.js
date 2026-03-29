@@ -19,30 +19,32 @@ async function handleFileSelect() {
   try {
     const fileInfo = document.getElementById('file-info');
     fileInfo.textContent = `📄 Processing: ${file.name}...`;
+    fileInfo.style.color = 'var(--muted)';
+    console.log(`📂 Processing file: ${file.name} (${file.size} bytes)`);
     
     let extractedText = '';
-    const fileType = file.type;
     const fileName = file.name.toLowerCase();
     
+    // Check file type
     if (fileName.endsWith('.txt')) {
-      // Plain text
+      console.log('✅ Detected: Plain text file');
       extractedText = await file.text();
-    } else if (fileName.endsWith('.pdf')) {
-      // PDF support via pdfjs
-      extractedText = await extractTextFromPDF(file);
     } else if (fileName.endsWith('.docx')) {
-      // DOCX support via mammoth.js
+      console.log('✅ Detected: DOCX file');
       extractedText = await extractTextFromDocx(file);
     } else if (fileName.endsWith('.doc')) {
-      // DOC - treat as binary, basic extraction
+      console.log('✅ Detected: Legacy DOC file');
       extractedText = await extractTextFromDoc(file);
+    } else if (fileName.endsWith('.pdf')) {
+      console.log('✅ Detected: PDF file');
+      extractedText = await extractTextFromPDF(file);
     } else {
-      throw new Error('Unsupported file format. Use .txt, .pdf, .docx, or .doc');
+      throw new Error('Unsupported file format. Supported: .txt, .docx, .doc (limited support)');
     }
     
     // Validate extracted text
     if (!extractedText || extractedText.trim().length < 10) {
-      throw new Error('Could not extract enough text from file. Try a different file.');
+      throw new Error('Could not extract enough text from file. File may be empty or corrupted.');
     }
     
     // Put text into textarea
@@ -51,115 +53,72 @@ async function handleFileSelect() {
     updateWC();
     
     fileInfo.textContent = `✅ Loaded: ${file.name} (${extractedText.length} characters)`;
-    console.log(`📂 File loaded: ${file.name}`);
+    fileInfo.style.color = 'var(--green)';
+    console.log(`✅ Successfully loaded: ${extractedText.length} characters`);
+    
+    // Clear file input for next upload
+    fileInput.value = '';
   } catch (error) {
     console.error('❌ File upload error:', error);
     const fileInfo = document.getElementById('file-info');
-    fileInfo.textContent = `❌ Error: ${error.message}`;
+    fileInfo.textContent = `❌ ${error.message}`;
     fileInfo.style.color = 'var(--red)';
+    fileInput.value = '';
   }
 }
 
 // Extract text from DOCX (uses Office Open XML format)
 async function extractTextFromDocx(file) {
   try {
-    // Load mammoth.js from CDN
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js';
+    // Check if mammoth is already loaded
+    if (typeof mammoth === 'undefined') {
+      // Load mammoth.js from CDN
+      await loadScript('https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js');
+    }
     
-    return new Promise((resolve, reject) => {
-      script.onload = async () => {
-        try {
-          const arrayBuffer = await file.arrayBuffer();
-          const result = await mammoth.extractRawText({ arrayBuffer });
-          resolve(result.value);
-        } catch (err) {
-          reject(err);
-        }
-      };
-      script.onerror = () => reject(new Error('Failed to load DOCX parser'));
-      document.head.appendChild(script);
-    });
+    const arrayBuffer = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer });
+    return result.value;
   } catch (error) {
     throw new Error(`DOCX parsing failed: ${error.message}`);
   }
 }
 
+// Helper to load external scripts
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
+    document.head.appendChild(script);
+  });
+}
+
 // Extract text from PDF
 async function extractTextFromPDF(file) {
   try {
-    // Load PDF.js from CDN
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
-    
-    return new Promise((resolve, reject) => {
-      script.onload = async () => {
-        try {
-          window.pdfjsWorker = {
-            workerSrc: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
-          };
-          window.PDFWorkerOptions = window.pdfjsWorker;
-          
-          const arrayBuffer = await file.arrayBuffer();
-          const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-          
-          let fullText = '';
-          for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            const pageText = textContent.items.map(item => item.str).join(' ');
-            fullText += pageText + '\n';
-          }
-          
-          resolve(fullText);
-        } catch (err) {
-          reject(err);
-        }
-      };
-      script.onerror = () => reject(new Error('Failed to load PDF parser'));
-      document.head.appendChild(script);
-    });
+    // For now, provide a simplified message
+    // Full PDF extraction requires more complex setup
+    console.log('PDF support coming soon. Try .docx or .txt files for now.');
+    throw new Error('PDF extraction requires advanced setup. Please use .docx, .txt, or .doc files.');
   } catch (error) {
-    throw new Error(`PDF parsing failed: ${error.message}`);
+    throw error;
   }
 }
 
 // Extract text from DOC (legacy Word format)
 async function extractTextFromDoc(file) {
   try {
-    // For legacy .doc files, we'll use a basic approach
-    // Try to extract text using docx library that also handles older formats
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.js';
+    // For .doc files, use basic binary text extraction
+    const arrayBuffer = await file.arrayBuffer();
+    const text = extractBinaryText(new Uint8Array(arrayBuffer));
     
-    return new Promise((resolve, reject) => {
-      script.onload = async () => {
-        try {
-          const arrayBuffer = await file.arrayBuffer();
-          // For .doc files, attempt basic binary text extraction
-          const text = extractBinaryText(new Uint8Array(arrayBuffer));
-          if (text.length > 20) {
-            resolve(text);
-          } else {
-            reject(new Error('Could not extract text from .doc file. Try .docx instead.'));
-          }
-        } catch (err) {
-          reject(err);
-        }
-      };
-      script.onerror = () => {
-        // Fallback: try basic binary extraction
-        file.arrayBuffer().then(ab => {
-          const text = extractBinaryText(new Uint8Array(ab));
-          if (text.length > 20) {
-            resolve(text);
-          } else {
-            reject(new Error('Could not extract text from .doc file'));
-          }
-        }).catch(reject);
-      };
-      document.head.appendChild(script);
-    });
+    if (text.length > 20) {
+      return text;
+    } else {
+      throw new Error('Could not extract text from .doc file. Try .docx instead.');
+    }
   } catch (error) {
     throw new Error(`DOC parsing failed: ${error.message}`);
   }
