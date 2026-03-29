@@ -69,26 +69,49 @@ async function loadModel() {
     console.log('📦 Importing Transformers.js library...');
     const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js');
     
-    // CRITICAL: Configure environment to use cached CDN instead of direct Hugging Face API
-    // This bypasses the 401 CORS/auth errors from huggingface.co
+    // Configure environment
     env.allowLocalModels = false;
     env.allowRemoteModels = true;
     env.allowSaving = false;
-    
-    // Use Hugging Face's CDN (cdn-models.huggingface.co) which has better CORS support
-    // This is the official CDN for model weights
-    env.remoteURL = 'https://cdn-models.huggingface.co/';
+    env.useWebWorkers = false;
     
     console.log('✅ Transformers.js library loaded');
-    console.log('🤖 Loading RoBERTa model from Hugging Face CDN...');
+    console.log('🤖 Loading RoBERTa model...');
+    
+    // Strategy: Intercept fetch to use CORS proxy if needed
+    const originalFetch = globalThis.fetch;
+    let useCorsProxy = false;
+    
+    globalThis.fetch = function(...args) {
+      const url = args[0];
+      const init = args[1];
+      
+      // If request is to huggingface.co and corsProxy is enabled, wrap it
+      if (useCorsProxy && typeof url === 'string' && url.includes('huggingface.co')) {
+        const proxiedUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+        console.log(`🔄 Using CORS proxy for: ${url.substring(url.lastIndexOf('/') + 1)}`);
+        return originalFetch.call(this, proxiedUrl, init);
+      }
+      return originalFetch.call(this, ...args);
+    };
     
     // Retry logic with different strategies
     let retries = 0;
-    const maxRetries = 3;
+    const maxRetries = 4;
     let lastError = null;
 
     while (retries < maxRetries) {
       try {
+        // First 2 attempts: direct
+        // Attempt 3+: use CORS proxy
+        if (retries >= 2) {
+          useCorsProxy = true;
+          console.log('🔄 Attempt ' + (retries + 1) + ': Enabling CORS proxy...');
+        } else {
+          useCorsProxy = false;
+          console.log('🔄 Attempt ' + (retries + 1) + ': Trying direct download...');
+        }
+
         detector = await pipeline('text-classification', 'Xenova/roberta-base-openai-detector', { 
           quantized: true,
           progress_callback: (data) => {
@@ -96,7 +119,7 @@ async function loadModel() {
             if (data.progress !== undefined) {
               const downloadProgress = Math.min(95, 50 + (data.progress * 45));
               updateProgressBar(downloadProgress);
-              console.log(`📥 Download progress: ${Math.round(downloadProgress)}%`);
+              console.log(`📥 Progress: ${Math.round(downloadProgress)}%`);
             }
           }
         });
@@ -105,43 +128,21 @@ async function loadModel() {
       } catch (error) {
         lastError = error;
         retries++;
-        console.warn(`⚠️  Model load attempt ${retries} failed:`, error.message);
-        
-        // Try alternate CDN on second attempt
-        if (retries === 1) {
-          console.log('🔄 Attempt 2: Trying jsDelivr CDN mirror...');
-          env.remoteURL = 'https://cdn.jsdelivr.net/npm/@xenova/';
-        }
-        // Try with cache busting on third attempt
-        else if (retries === 2) {
-          console.log('🔄 Attempt 3: Trying with cache bypass...');
-          env.remoteURL = 'https://cdn-models.huggingface.co/';
-          // Force fresh load by removing cached references
-          if (typeof indexedDB !== 'undefined') {
-            try {
-              const dbs = await indexedDB.databases();
-              dbs.forEach(db => {
-                if (db.name && db.name.includes('cache')) {
-                  indexedDB.deleteDatabase(db.name);
-                  console.log('🗑️  Cleared IndexedDB cache: ' + db.name);
-                }
-              });
-            } catch (e) {
-              console.log('Note: Could not clear IndexedDB');
-            }
-          }
-        }
+        console.warn(`⚠️  Attempt ${retries} failed:`, error.message);
         
         if (retries < maxRetries) {
-          const delay = Math.pow(2, retries) * 1000; // 2s, 4s, 8s
+          const delay = Math.pow(2, retries) * 1000;
           console.log(`⏳ Retrying in ${delay}ms...`);
           await new Promise(r => setTimeout(r, delay));
         }
       }
     }
 
+    // Restore original fetch
+    globalThis.fetch = originalFetch;
+
     if (!detector && lastError) {
-      throw new Error(`Failed to load model after ${maxRetries} attempts: ${lastError.message}`);
+      throw new Error(`Failed to load model: ${lastError.message}`);
     }
 
     // Complete the progress bar
@@ -166,19 +167,23 @@ async function loadModel() {
     if (statusEl) statusEl.style.display = 'none';
     if (hintEl) hintEl.style.display = 'block';
     
+    // Restore original fetch in case of error
+    globalThis.fetch = fetch;
+    
     // Show error to user
     const errBox = document.getElementById('err-box');
     if (errBox) {
-      const errorMsg = `❌ Model download blocked: ${error.message}. 
+      const errorMsg = `❌ Model download blocked by network: ${error.message}. 
 
-Quick fixes:
-1. Close all other browser tabs (free up bandwidth)
-2. Clear cache: F12 → Storage → Clear All
-3. Try incognito/private mode (Ctrl+Shift+N)
-4. Disable VPN/proxy if using one
-5. Restart browser and try again
+This usually means your ISP/network is blocking Hugging Face.
 
-If still blocked, the issue is a network restriction on your connection.`;
+Try these:
+1. Use a VPN (ExpressVPN, NordVPN, Proton, etc)
+2. Try from a different network (mobile hotspot, café WiFi)
+3. Wait a few minutes and refresh
+4. If on corporate network, ask your IT team
+
+The app uses a CORS proxy but it may also be blocked. A VPN is the most reliable solution.`;
       errBox.textContent = errorMsg;
       errBox.style.display = 'block';
     }
