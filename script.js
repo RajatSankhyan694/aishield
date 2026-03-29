@@ -14,159 +14,123 @@ async function handleFileSelect() {
   const fileInput = document.getElementById('file-input');
   const file = fileInput.files[0];
   
-  if (!file) return;
+  if (!file) {
+    console.log('❌ No file selected');
+    return;
+  }
   
   try {
     const fileInfo = document.getElementById('file-info');
     fileInfo.textContent = `📄 Processing: ${file.name}...`;
     fileInfo.style.color = 'var(--muted)';
-    console.log(`📂 Processing file: ${file.name} (${file.size} bytes)`);
+    console.log(`📂 File selected: ${file.name} (${file.size} bytes)`);
     
     let extractedText = '';
     const fileName = file.name.toLowerCase();
     
-    // Check file type
+    // Check file type and extract
     if (fileName.endsWith('.txt')) {
       console.log('✅ Detected: Plain text file');
       extractedText = await file.text();
-    } else if (fileName.endsWith('.docx')) {
-      console.log('✅ Detected: DOCX file');
-      extractedText = await extractTextFromDocx(file);
-    } else if (fileName.endsWith('.doc')) {
-      console.log('✅ Detected: Legacy DOC file');
-      extractedText = await extractTextFromDoc(file);
-    } else if (fileName.endsWith('.pdf')) {
-      console.log('✅ Detected: PDF file');
-      extractedText = await extractTextFromPDF(file);
-    } else {
-      throw new Error('Unsupported file format. Supported: .txt, .docx, .doc, .pdf');
-    }
-    
-    // Validate extracted text
-    if (!extractedText || extractedText.trim().length < 10) {
-      throw new Error('Could not extract enough text from file. File may be empty or corrupted.');
-    }
-    
-    // Put text into textarea
-    const textarea = document.getElementById('main-input');
-    textarea.value = extractedText;
-    updateWC();
-    
-    fileInfo.textContent = `✅ Loaded: ${file.name} (${extractedText.length} characters)`;
-    fileInfo.style.color = 'var(--green)';
-    console.log(`✅ Successfully loaded: ${extractedText.length} characters`);
-    
-    // Clear file input for next upload
-    fileInput.value = '';
-  } catch (error) {
-    console.error('❌ File upload error:', error);
-    const fileInfo = document.getElementById('file-info');
-    fileInfo.textContent = `❌ ${error.message}`;
-    fileInfo.style.color = 'var(--red)';
-    fileInput.value = '';
-  }
-}
-
-// Extract text from DOCX (uses Office Open XML format)
-async function extractTextFromDocx(file) {
-  try {
-    // Check if mammoth is already loaded
-    if (typeof mammoth === 'undefined') {
-      // Load mammoth.js from CDN
-      await loadScript('https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js');
-    }
-    
-    const arrayBuffer = await file.arrayBuffer();
-    const result = await mammoth.extractRawText({ arrayBuffer });
-    return result.value;
-  } catch (error) {
-    throw new Error(`DOCX parsing failed: ${error.message}`);
-  }
-}
-
-// Helper to load external scripts
-function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = src;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
-    document.head.appendChild(script);
-  });
-}
-
-// Extract text from PDF
-async function extractTextFromPDF(file) {
-  try {
-    console.log('Loading PDF.js library...');
-    
-    // Check if pdfjs is already loaded
-    if (typeof window.pdfjsLib === 'undefined') {
-      // Load PDF.js from CDN
-      await loadScript('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js');
-    }
-    
-    // Set up worker
-    if (typeof window.pdfjsWorker === 'undefined') {
+    } 
+    else if (fileName.endsWith('.docx')) {
+      console.log('✅ Detected: DOCX file - Loading Mammoth.js...');
+      if (typeof mammoth === 'undefined') {
+        await loadScript('https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js');
+      }
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      extractedText = result.value;
+    } 
+    else if (fileName.endsWith('.pdf')) {
+      console.log('✅ Detected: PDF file - Loading PDF.js...');
+      if (typeof window.pdfjsLib === 'undefined') {
+        await loadScript('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js');
+      }
       window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
-    }
-    
-    console.log('Extracting PDF text...');
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    
-    let fullText = '';
-    console.log(`PDF has ${pdf.numPages} pages`);
-    
-    for (let i = 1; i <= pdf.numPages; i++) {
-      try {
+      
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let fullText = '';
+      
+      for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
         const pageText = textContent.items.map(item => item.str).join(' ');
         fullText += pageText + '\n';
         console.log(`✅ Extracted page ${i}/${pdf.numPages}`);
-      } catch (pageError) {
-        console.warn(`⚠️ Could not extract page ${i}: ${pageError.message}`);
       }
+      extractedText = fullText;
+    } 
+    else if (fileName.endsWith('.doc')) {
+      console.log('✅ Detected: Legacy DOC file');
+      const arrayBuffer = await file.arrayBuffer();
+      const text = extractBinaryText(new Uint8Array(arrayBuffer));
+      extractedText = text;
+    } 
+    else {
+      throw new Error('❌ Unsupported file format. Use: .txt, .docx, .pdf, or .doc');
     }
     
-    return fullText;
+    // Validate extracted text
+    if (!extractedText || extractedText.trim().length < 5) {
+      throw new Error('❌ Could not extract text from file. File may be empty or corrupted.');
+    }
+    
+    // Load text into textarea
+    const textarea = document.getElementById('main-input');
+    if (!textarea) {
+      throw new Error('❌ Text area not found');
+    }
+    
+    textarea.value = extractedText;
+    updateWC();
+    
+    fileInfo.textContent = `✅ Loaded: ${file.name} (${extractedText.length} characters)`;
+    fileInfo.style.color = 'var(--green)';
+    console.log(`✅ Success! ${extractedText.length} characters loaded`);
+    
+    // Clear file input
+    fileInput.value = '';
   } catch (error) {
-    throw new Error(`PDF parsing failed: ${error.message}`);
+    console.error('❌ Error:', error.message);
+    const fileInfo = document.getElementById('file-info');
+    fileInfo.textContent = `❌ Error: ${error.message}`;
+    fileInfo.style.color = 'var(--red)';
+    fileInput.value = '';
   }
 }
 
-// Extract text from DOC (legacy Word format)
-async function extractTextFromDoc(file) {
-  try {
-    // For .doc files, use basic binary text extraction
-    const arrayBuffer = await file.arrayBuffer();
-    const text = extractBinaryText(new Uint8Array(arrayBuffer));
-    
-    if (text.length > 20) {
-      return text;
-    } else {
-      throw new Error('Could not extract text from .doc file. Try .docx instead.');
-    }
-  } catch (error) {
-    throw new Error(`DOC parsing failed: ${error.message}`);
-  }
+// Simple helper to load external scripts
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.onload = () => {
+      console.log(`✅ Loaded library: ${src}`);
+      resolve();
+    };
+    script.onerror = () => {
+      console.error(`❌ Failed to load: ${src}`);
+      reject(new Error(`Could not load library from ${src}`));
+    };
+    document.head.appendChild(script);
+  });
 }
 
 // Basic binary text extraction (fallback for .doc files)
 function extractBinaryText(buffer) {
-  // Look for printable ASCII characters in the binary buffer
   const text = Array.from(buffer)
     .map(byte => {
-      // Keep printable ASCII and common unicode ranges
       if ((byte >= 32 && byte <= 126) || byte > 127) {
         return String.fromCharCode(byte);
       }
       return '';
     })
     .join('')
-    .replace(/[^\w\s.,!?;:'\-–—]/g, ' ') // Remove non-text chars
-    .replace(/\s+/g, ' ') // Clean whitespace
+    .replace(/[^\w\s.,!?;:'\-–—]/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
   
   return text;
